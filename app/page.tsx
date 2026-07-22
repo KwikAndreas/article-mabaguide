@@ -2,6 +2,7 @@
 
 import React, { useState, useRef } from "react";
 import ReactMarkdown from "react-markdown";
+import rehypeSlug from "rehype-slug";
 
 const FACULTIES = ["General", "FTD", "FISH"];
 const PRODI_BY_FACULTY: Record<string, string[]> = {
@@ -23,6 +24,8 @@ export default function GeneratorPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [isCopied, setIsCopied] = useState(false);
+  const [showToolbar, setShowToolbar] = useState(false);
+  const [toolbarPos, setToolbarPos] = useState({ top: 0, left: 0 });
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -81,6 +84,91 @@ ${formData.content}
         textareaRef.current.setSelectionRange(start + snippet.length, start + snippet.length);
       }
     }, 0);
+  };
+
+  const handleGenerateTOC = () => {
+    // Cari semua baris yang dimulai dengan ## atau ###
+    const headings = [...formData.content.matchAll(/^(#{2,3})\s+(.+)$/gm)];
+    
+    if (headings.length === 0) {
+      alert("Belum ada sub-judul (## atau ###) di artikel Anda untuk dibuatkan Daftar Isi.");
+      return;
+    }
+    
+    let toc = "## Daftar Isi\n";
+    headings.forEach(match => {
+      const level = match[1].length; // 2 or 3
+      const text = match[2];
+      // Generate standard slug
+      const slug = text.toLowerCase().trim().replace(/[^\w\s-]/g, '').replace(/[\s_]+/g, '-');
+      const indent = level === 3 ? "  " : "";
+      toc += `${indent}- [${text}](#${slug})\n`;
+    });
+    
+    insertMarkdown(toc + "\n");
+  };
+
+  const formatSelection = (prefix: string, suffix: string = prefix) => {
+    if (!textareaRef.current) return;
+    
+    const start = textareaRef.current.selectionStart;
+    const end = textareaRef.current.selectionEnd;
+    if (start === end) return;
+
+    const currentContent = formData.content;
+    const selectedText = currentContent.substring(start, end);
+    
+    // Check if already formatted
+    const isFormatted = 
+      start >= prefix.length && 
+      currentContent.substring(start - prefix.length, start) === prefix && 
+      currentContent.substring(end, end + suffix.length) === suffix;
+    
+    let newContent = "";
+    let newStart = start;
+    let newEnd = end;
+
+    if (isFormatted) {
+      // Remove formatting
+      newContent = currentContent.substring(0, start - prefix.length) + selectedText + currentContent.substring(end + suffix.length);
+      newStart = start - prefix.length;
+      newEnd = newStart + selectedText.length;
+    } else {
+      // Add formatting
+      newContent = currentContent.substring(0, start) + prefix + selectedText + suffix + currentContent.substring(end);
+      newStart = start + prefix.length;
+      newEnd = newStart + selectedText.length;
+    }
+    
+    setFormData((prev) => ({ ...prev, content: newContent }));
+    setShowToolbar(false);
+
+    // Move cursor to maintain selection
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        textareaRef.current.setSelectionRange(newStart, newEnd);
+      }
+    }, 0);
+  };
+
+  const checkSelection = (e?: any) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    if (textarea.selectionStart !== textarea.selectionEnd) {
+      setShowToolbar(true);
+      if (e && e.type === 'mouseup') {
+        // Show slightly above the cursor
+        setToolbarPos({ top: e.clientY - 40, left: e.clientX });
+      } else if (!showToolbar) {
+        // Fallback for keyboard selection
+        const rect = textarea.getBoundingClientRect();
+        setToolbarPos({ top: rect.top + 60, left: rect.left + rect.width / 2 });
+      }
+    } else {
+      setShowToolbar(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -256,6 +344,14 @@ ${formData.content}
                   <div className="flex gap-2 p-3 border-b border-white/[0.08] bg-black/20 overflow-x-auto custom-scrollbar">
                     <button
                       type="button"
+                      onClick={handleGenerateTOC}
+                      className="whitespace-nowrap text-xs font-medium px-3 py-1.5 rounded-md bg-blue-500/20 border border-blue-500/30 text-blue-200 hover:bg-blue-500/30 transition-colors"
+                    >
+                      + Daftar Isi (Auto)
+                    </button>
+                    <div className="w-px h-6 bg-white/[0.1] self-center mx-1"></div>
+                    <button
+                      type="button"
                       onClick={() => insertMarkdown("## Pengantar\nTulis pengantar di sini...\n\n")}
                       className="whitespace-nowrap text-xs font-medium px-3 py-1.5 rounded-md bg-white/[0.05] border border-white/[0.08] text-[#ededed] hover:bg-white/[0.1] transition-colors"
                     >
@@ -290,12 +386,42 @@ ${formData.content}
                       + Catatan
                     </button>
                   </div>
+                  
+                  {/* Floating Selection Toolbar */}
+                  {showToolbar && (
+                    <div 
+                      className="fixed z-50 flex items-center gap-1 p-1 bg-[#1a1a1a] backdrop-blur-xl border border-white/[0.15] rounded-lg shadow-2xl transition-all duration-200"
+                      style={{ top: toolbarPos.top, left: toolbarPos.left, transform: 'translateX(-50%)' }}
+                    >
+                      <button
+                        onMouseDown={(e) => { e.preventDefault(); formatSelection('**'); }}
+                        className="px-3 py-1.5 text-sm font-bold text-white hover:bg-white/10 rounded transition-colors"
+                        title="Bold"
+                      >
+                        B
+                      </button>
+                      <button
+                        onMouseDown={(e) => { e.preventDefault(); formatSelection('*'); }}
+                        className="px-3 py-1.5 text-sm italic font-serif text-white hover:bg-white/10 rounded transition-colors"
+                        title="Italic"
+                      >
+                        I
+                      </button>
+                    </div>
+                  )}
+
                   {/* Textarea */}
                   <textarea
                     ref={textareaRef}
                     name="content"
                     value={formData.content}
-                    onChange={handleChange}
+                    onChange={(e) => {
+                      handleChange(e);
+                      checkSelection(e);
+                    }}
+                    onMouseUp={checkSelection}
+                    onKeyUp={checkSelection}
+                    onScroll={() => setShowToolbar(false)}
                     placeholder="Mulai menulis konten Markdown di sini..."
                     className="flex-1 w-full bg-transparent p-5 text-sm font-mono focus:outline-none resize-none placeholder:text-[#3f3f46]"
                   ></textarea>
@@ -331,7 +457,7 @@ ${formData.content}
                     
                     {/* Visual Rendered Markdown */}
                     <div className="markdown-preview text-[#d4d4d8] leading-relaxed space-y-6 text-sm">
-                      <ReactMarkdown>
+                      <ReactMarkdown rehypePlugins={[rehypeSlug]}>
                         {formData.content || "*Belum ada konten...*"}
                       </ReactMarkdown>
                     </div>
