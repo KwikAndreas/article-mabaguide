@@ -385,6 +385,20 @@ ${formData.content}
                     >
                       + Catatan
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => insertMarkdown('[Teks Link Di Sini](https://link-tujuan.com)')}
+                      className="whitespace-nowrap text-xs font-medium px-3 py-1.5 rounded-md bg-white/[0.05] border border-white/[0.08] text-[#ededed] hover:bg-white/[0.1] transition-colors"
+                    >
+                      + Link
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => insertMarkdown('<a href="https://link-tujuan.com" target="_blank" rel="noopener noreferrer">Teks Link Di Sini</a>\n\n')}
+                      className="whitespace-nowrap text-xs font-medium px-3 py-1.5 rounded-md bg-white/[0.05] border border-white/[0.08] text-[#ededed] hover:bg-white/[0.1] transition-colors"
+                    >
+                      + Link (New Tab)
+                    </button>
                   </div>
                   
                   {/* Floating Selection Toolbar */}
@@ -457,7 +471,12 @@ ${formData.content}
                     
                     {/* Visual Rendered Markdown */}
                     <div className="markdown-preview text-[#d4d4d8] leading-relaxed space-y-6 text-sm">
-                      <ReactMarkdown rehypePlugins={[rehypeSlug]}>
+                      <ReactMarkdown 
+                        rehypePlugins={[rehypeSlug]}
+                        components={{
+                          a: ({node, ...props}: any) => <a {...props} target="_blank" rel="noopener noreferrer" />
+                        }}
+                      >
                         {formData.content || "*Belum ada konten...*"}
                       </ReactMarkdown>
                     </div>
